@@ -1,0 +1,44 @@
+#!/usr/bin/env python
+# -*- coding:utf-8 -*-
+# Power by Zongsheng Yue 2019-01-07 14:36:55
+
+
+import numpy as np
+from cv2 import imread
+from noise_est.utils import im2patch, im2double
+import time
+import scipy.io as sio
+
+def noise_estimate(im, pch_size=8):
+    '''
+    Implement of noise level estimation of the following paper:
+    Chen G , Zhu F , Heng P A . An Efficient Statistical Method for Image Noise Level Estimation[C]// 2015 IEEE International Conference
+    on Computer Vision (ICCV). IEEE Computer Society, 2015.
+    Input:
+        im: the noise image, H x W x 3 or H x W numpy tensor, range [0,1]
+        pch_size: patch_size
+    Output:
+        noise_level: the estimated noise level
+    '''
+
+    if im.ndim == 3:
+        im = im.transpose((2, 0, 1))
+    else:
+        im = np.expand_dims(im, axis=0)
+
+    # image to patch
+    pch = im2patch(im, pch_size, 3)  # C x pch_size x pch_size x num_pch tensor
+    num_pch = pch.shape[3]
+    pch = pch.reshape((-1, num_pch))  # d x num_pch matrix
+    d = pch.shape[0]
+
+    mu = pch.mean(axis=1, keepdims=True)  # d x 1
+    X = pch - mu
+    sigma_X = np.matmul(X, X.transpose()) / num_pch
+    sig_value, _ = np.linalg.eigh(sigma_X)
+    sig_value.sort()
+
+    for ii in range(-1, -d-1, -1):
+        tau = np.mean(sig_value[:ii])
+        if np.sum(sig_value[:ii]>tau) == np.sum(sig_value[:ii] < tau):
+            return np.sqrt(tau)
